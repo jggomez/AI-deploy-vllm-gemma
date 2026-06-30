@@ -12,12 +12,12 @@ flowchart TD
     LB -->|Intercept & Inspect| Ext[Model Armor Service Extension]
     Ext -->|Check Safety Templates| MA[Google Cloud Model Armor]
     
-    subgraph Secure Gateway
+    subgraph "Secure Gateway"
         LB
         Ext
     end
 
-    subgraph Internal Network (VPC)
+    subgraph "Internal Network (VPC)"
         vLLM[Cloud Run vLLM GPU Service]
         Monitor[Prometheus GMP Sidecar]
     end
