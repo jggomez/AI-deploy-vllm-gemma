@@ -1,0 +1,61 @@
+substitutions:
+  _REGION: "us-central1"
+  _REPO_NAME: "agentverse-repo"
+  _SERVICE_ACCOUNT_EMAIL: ""
+  _VPC_NETWORK: "default"
+  _VPC_SUBNET: "default"
+  _MODELS_BUCKET: ""
+  _MODEL_PATH: "/mnt/models/gemma-2-9b-it"
+
+steps:
+# Step 1: Build the vLLM Docker container
+- name: 'gcr.io/cloud-builders/docker'
+  id: 'Build Container'
+  args: ['build', '-t', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/gemma-vllm-fuse-service:latest', '.']
+
+# Step 2: Push the image to Artifact Registry
+- name: 'gcr.io/cloud-builders/docker'
+  id: 'Push Container'
+  args: ['push', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/gemma-vllm-fuse-service:latest']
+
+# Step 3: Deploy the container to Cloud Run with GPU, FUSE, and VPC configuration
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  id: 'Deploy to Cloud Run'
+  entrypoint: 'gcloud'
+  args:
+  - 'run'
+  - 'deploy'
+  - 'gemma-vllm-fuse-service'
+  - '--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/gemma-vllm-fuse-service:latest'
+  - '--region=${_REGION}'
+  - '--platform=managed'
+  - '--execution-environment=gen2' # Gen2 is required for Cloud Storage FUSE mounts
+  - '--cpu=4'                     # Minimum CPUs for L4 GPU
+  - '--memory=16Gi'               # Minimum memory for L4 GPU
+  - '--gpu=1'
+  - '--gpu-type=nvidia-l4'
+  - '--no-gpu-zonal-redundancy'   # Required for L4 GPU on Cloud Run
+  - '--port=8000'
+  - '--timeout=3600'
+  # Set startup probe. vLLM takes 3-5 mins to load the model on cold start.
+  - '--startup-probe=timeoutSeconds=60,periodSeconds=60,failureThreshold=10,initialDelaySeconds=180,httpGet.port=8000,httpGet.path=/health'
+  - '--concurrency=4'             # Max concurrent requests per instance
+  - '--min-instances=1'           # Set min-instances=1 to avoid cold starts in production
+  - '--max-instances=1'           # Standard limit for single GPU (scale-out can be configured)
+  - '--no-cpu-throttling'         # Required for background tasks and GPU operations
+  - '--allow-unauthenticated'
+  - '--service-account=${_SERVICE_ACCOUNT_EMAIL}'
+  - '--vpc-egress=all-traffic'     # Required to access Google APIs (GCS FUSE) via Private Google Access
+  - '--network=${_VPC_NETWORK}'
+  - '--subnet=${_VPC_SUBNET}'
+  - '--add-volume=name=gcs-models,type=cloud-storage,bucket=${_MODELS_BUCKET}'
+  - '--add-volume-mount=volume=gcs-models,mount-path=/mnt/models'
+  - '--args=--host=0.0.0.0'
+  - '--args=--port=8000'
+  - '--args=--model=${_MODEL_PATH}'
+  - '--args=--trust-remote-code'
+  - '--args=--gpu-memory-utilization=0.9'
+  - '--labels=dev-tutorial-codelab=agentverse'
+
+options:
+  machineType: 'E2_HIGHCPU_8'     # Speed up the container build process

@@ -1,0 +1,62 @@
+substitutions:
+  _MODEL_ID: "google/gemma-2-9b-it"
+  _MODELS_BUCKET: ""
+  _MODEL_DIR_NAME: "gemma-2-9b-it"
+
+timeout: 7200s
+
+steps:
+# Step 1: Pre-flight checks
+- name: 'alpine'
+  id: 'Check Variables'
+  entrypoint: 'sh'
+  args:
+  - '-c'
+  - |
+    if [ -z "${_MODELS_BUCKET}" ]; then
+      echo "ERROR: _MODELS_BUCKET substitution is empty. Please provide a value."
+      exit 1
+    fi
+    echo "Pre-flight checks passed."
+
+# Step 2: Download Model from Hugging Face
+- name: 'python:3.12-slim'
+  id: 'Download Model'
+  timeout: 6000s
+  entrypoint: 'bash'
+  args:
+  - '-c'
+  - |
+    set -e
+    echo "----> Installing Hugging Face CLI and speedup libraries..."
+    pip install huggingface_hub hf_transfer --quiet
+    export HF_HUB_ENABLE_HF_TRANSFER=1
+    
+    echo "----> Logging in to Hugging Face..."
+    hf auth login --token $$HF_TOKEN
+    
+    echo "----> Downloading model ${_MODEL_ID} to workspace..."
+    hf download \
+      --repo-type model \
+      --local-dir /workspace/model \
+      ${_MODEL_ID}
+      
+    echo "----> Download complete."
+  secretEnv: ['HF_TOKEN']
+
+# Step 3: Copy model weights to Google Cloud Storage
+- name: 'gcr.io/cloud-builders/gcloud'
+  id: 'Copy to GCS'
+  entrypoint: 'bash'
+  args:
+  - '-c'
+  - |
+    set -e
+    echo "----> Transferring model weights to gs://${_MODELS_BUCKET}/${_MODEL_DIR_NAME}..."
+    gcloud storage cp -r /workspace/model/* gs://${_MODELS_BUCKET}/${_MODEL_DIR_NAME}/
+    echo "----> GCS upload complete."
+
+availableSecrets:
+  secretManager:
+  - versionName: projects/$PROJECT_ID/secrets/hf-secret/versions/latest
+    env: 'HF_TOKEN'

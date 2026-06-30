@@ -1,0 +1,26 @@
+# Security credentials and certificates
+*.key
+*.crt
+*.pem
+
+# Python environment and cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+env/
+venv/
+ENV/
+
+# Temporary generated deployment files
+deploy/observability/vllm-cloudrun.yaml
+deploy/observability/service.yaml
+deploy/loadbalancer/service_extension.yaml
+
+# System specific files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
