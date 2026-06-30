@@ -8,7 +8,7 @@ This directory contains SRE-grade automation shell scripts and configuration blu
 
 ```mermaid
 flowchart TD
-    User([Client Request]) -->|HTTPS Port 443| LB[Regional External HTTP(S) Load Balancer]
+    User([Client Request]) -->|HTTPS Port 443| LB["Regional External HTTP(S) Load Balancer"]
     LB -->|Intercept & Inspect| Ext[Model Armor Service Extension]
     Ext -->|Check Safety Templates| MA[Google Cloud Model Armor]
     
